@@ -1,0 +1,14 @@
+[package]
+name = "slychat_client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+slychat_common = { path = "../slychat_common" }
+serde = { workspace = true, features = ["derive"] }
+openssl = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+bytes = { workspace = true }
+serde_json = { workspace = true }

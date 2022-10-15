@@ -1,0 +1,9 @@
+[workspace]
+members = ["slychat_server", "slychat_client", "slychat_common"]
+
+[workspace.dependencies]
+serde = { version = "1.0.145", features = ["derive"] }
+openssl = "0.10.42"
+tokio = { version = "1.21.2", features = ["full"] }
+bytes = "1"
+serde_json = "1.0.86"
