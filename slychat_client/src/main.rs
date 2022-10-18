@@ -1,6 +1,6 @@
 use bytes::BytesMut;
 use slychat_common::encryption::{decrypt, encrypt, KeyData};
-use slychat_common::{ServerRequest, UserKey, UserMessage};
+use slychat_common::{APICommand, UserKey};
 use std::io;
 use std::process::exit;
 use std::str;
@@ -26,7 +26,7 @@ async fn refresh_roomkeys(
     stream: &mut TcpStream,
     roomkeys: &mut LockedRoomKeys,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let message = UserMessage::Command(ServerRequest::RefreshRoomKeys);
+    let message = APICommand::RefreshRoomKeysRequest;
     let serialized = serde_json::to_vec(&message)?;
 
     stream.write_all(&serialized).await?;
@@ -50,7 +50,7 @@ async fn refresh_roomkeys(
 #[tokio::main]
 async fn main() {
     // We run a thing
-    let r: RoomKeys = Vec::new();
+    // let r: RoomKeys = Vec::new();
 
     let passphrase = "hello";
     let keys = generate_key(passphrase.into());
@@ -86,8 +86,9 @@ async fn chatroom_listener<T: AsyncReadExt + Unpin + Send>(
     mut socket_reader: T,
     my_keys: &KeyData,
 ) {
+    let mut buffer: Vec<u8> = vec![0; 1024];
     loop {
-        let mut buffer: Vec<u8> = Vec::new();
+        buffer.clear();
 
         let data = match socket_reader.read(&mut buffer).await {
             Ok(n) if n > 0 => &buffer[..n],
@@ -130,8 +131,8 @@ where
                 .iter()
                 .map(|UserKey { user, public }| {
                     let message = encrypt(&buf, public);
-                    return serde_json::to_vec(&UserMessage::Message(user.to_string(), message))
-                        .expect("Failed to serialize message.");
+                    serde_json::to_vec(&APICommand::Message(user.to_string(), message))
+                        .expect("Failed to serialize message.")
                 })
                 .collect();
 

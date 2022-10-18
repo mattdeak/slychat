@@ -9,18 +9,13 @@ pub struct UserKey {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum ServerRequest {
+pub enum APICommand {
     Greet(UserKey),
-    RefreshRoomKeys,
+    RefreshRoomKeysRequest,
+    RefreshRoomKeysResponse(Vec<UserKey>),
     GoodBye,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum UserMessage {
     Message(String, Vec<u8>),
-    Command(ServerRequest),
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,6 +1,5 @@
 use openssl::rsa::{Padding, Rsa};
 use openssl::symm::Cipher;
-use serde::{Deserialize, Serialize};
 
 pub struct KeyData {
     pub public: Vec<u8>,
