@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{collections::HashMap, error::Error, fmt::Display, hash::Hash};
 
 use slychat_common::UserKey;
 use tokio::io::AsyncWriteExt;
@@ -9,14 +9,20 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-enum ServerError {
+pub enum ServerError {
     UserError(String),
     ChatRoomError(ChatRoomError),
 }
 
+impl From<ChatRoomError> for ServerError {
+    fn from(e: ChatRoomError) -> Self {
+        Self::ChatRoomError(e)
+    }
+}
+
 impl Display for ServerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
+        match self {
             ServerError::UserError(s) => write!(f, "{}", s),
             ChatRoomError => ChatRoomError.fmt(f),
         }
@@ -26,7 +32,7 @@ impl Display for ServerError {
 impl Error for ServerError {}
 
 const DEFAULT_CAPACITY: usize = 64;
-const WAITING_ROOM: String = "waiting_room".to_string();
+const WAITING_ROOM: &str = "waiting";
 pub struct Server<G: ChatRoom> {
     // I think this will need to be cleverly synchronized
     pub users: Vec<ChatUser>,
@@ -36,22 +42,35 @@ pub struct Server<G: ChatRoom> {
 
 impl<G: ChatRoom> Server<G> {
     pub fn new() -> Self {
+        let wr_str = WAITING_ROOM.to_string();
+
+        let mut chat_rooms = HashMap::new();
+
+        chat_rooms.insert(wr_str.clone(), G::build(wr_str, DEFAULT_CAPACITY));
         Self {
             users: Vec::new(),
-            chat_rooms: HashMap::new(),
+            chat_rooms,
         }
     }
 
-    pub fn create_user(&mut self, user: ChatUser) -> Result<(), ServerError> {
+    pub fn create_user(&mut self, mut user: ChatUser) -> Result<&mut ChatUser, ServerError> {
         // Should do a membership check first
         if !self
             .users
             .iter()
             .any(|cu| user.user_data.user == cu.user_data.user)
         {
+            if let Err(e) = self
+                .chat_rooms
+                .get_mut(&WAITING_ROOM.to_string())
+                .expect("Could not find waiting room")
+                .register_user(&mut user)
+            {
+                return Err(e.into());
+            };
+
             self.users.push(user);
-            self.chat_rooms[&WAITING_ROOM].register_user(&mut user);
-            Ok(())
+            Ok(self.users.last_mut().unwrap())
         } else {
             Err(ServerError::UserError("User already exists.".to_string()))
         }

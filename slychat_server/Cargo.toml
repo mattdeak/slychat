@@ -10,6 +10,8 @@ slychat_common = { path = "../slychat_common" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio-serde = { workspace = true }
+log = "0.4.17"
 
 [dev-dependencies]
 mockall = "0.11.2"

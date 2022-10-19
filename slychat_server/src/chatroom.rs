@@ -1,4 +1,5 @@
 use super::user::ChatUser;
+use log::info;
 use std::error::Error;
 use std::fmt::Display;
 use tokio::sync::mpsc::Sender;
@@ -6,13 +7,13 @@ use tokio::sync::mpsc::Sender;
 #[derive(Debug, Clone)]
 pub enum ChatRoomError {
     RegistrationFailure(Option<&'static str>),
-    UserAlreadyExists(&'static str),
+    UserAlreadyExists(String),
     MessageError(Option<&'static str>),
 }
 
 impl Display for ChatRoomError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
+        match self {
             ChatRoomError::RegistrationFailure(message) => {
                 let err_msg = message.unwrap_or("");
                 write!(f, "Registration Error{}", err_msg)
@@ -32,7 +33,7 @@ impl Error for ChatRoomError {}
 
 pub trait ChatRoom {
     fn build(id: String, capacity: usize) -> Self;
-    fn register_user(&mut self, user: &'static mut ChatUser) -> Result<(), ChatRoomError>;
+    fn register_user(&mut self, user: &mut ChatUser) -> Result<(), ChatRoomError>;
     fn unregister_user(&mut self, username: String) -> Result<(), ChatRoomError>;
     fn publish_message(&self, message: &'static str) -> Result<(), ChatRoomError>;
 }
@@ -75,14 +76,17 @@ impl ChatRoom for SimpleChatRoom {
         }
     }
 
-    fn register_user(&mut self, user: &'static mut ChatUser) -> Result<(), ChatRoomError> {
+    fn register_user<'a>(&'a mut self, user: &'a mut ChatUser) -> Result<(), ChatRoomError> {
+        info!("Registering user {} into {}", user.user_data.user, self.id);
         // Create a channel for sending the user messages
         let (sender, receiver) = tokio::sync::mpsc::channel::<String>(1024);
-        let username = &user.user_data.user;
+        // let username = &user.user_data.user;
 
         // Check if user already exists in chatroom
-        if self.channels.iter().any(|(u, _)| u == username) {
-            return Err(ChatRoomError::UserAlreadyExists(username));
+        if self.channels.iter().any(|(u, _)| u == &user.user_data.user) {
+            return Err(ChatRoomError::UserAlreadyExists(
+                user.user_data.user.clone(),
+            ));
         }
 
         user.receivers.insert(self.id.clone(), receiver);

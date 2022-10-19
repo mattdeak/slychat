@@ -1,7 +1,7 @@
 use bytes::BytesMut;
 use slychat_common::encryption::{decrypt, encrypt, KeyData};
 use slychat_common::{APICommand, UserKey};
-use std::io;
+use std::io::{self, Read};
 use std::process::exit;
 use std::str;
 use std::sync::{Arc, Mutex};
@@ -47,10 +47,35 @@ async fn refresh_roomkeys(
     Ok(())
 }
 
+async fn greet(
+    stream: &mut TcpStream,
+    username: String,
+    keys: &KeyData,
+) -> Result<(), &'static str> {
+    let user_data = UserKey {
+        user: username,
+        public: keys.public.clone(),
+    };
+    stream
+        .write_all(&serde_json::to_vec(&APICommand::Greet(user_data)).unwrap())
+        .await
+        .unwrap();
+    Ok(())
+}
+
+fn get_username() -> String {
+    println!("Enter Username: >");
+    let mut buffer = String::new();
+    let n = std::io::stdin().read_line(&mut buffer).unwrap();
+
+    buffer[..n].to_string()
+}
+
 #[tokio::main]
 async fn main() {
     // We run a thing
     // let r: RoomKeys = Vec::new();
+    let username = get_username();
 
     let passphrase = "hello";
     let keys = generate_key(passphrase.into());
@@ -63,6 +88,14 @@ async fn main() {
         }
     };
 
+    // Greet the server
+    println!("Greeting!");
+    if greet(&mut stream, username, &keys).await.is_err() {
+        eprintln!("Error in greeting");
+        exit(1);
+    };
+
+    println!("Awaiting room keys");
     let mut room_keys: LockedRoomKeys = Arc::new(Mutex::new(Vec::new()));
     if refresh_roomkeys(&mut stream, &mut room_keys).await.is_err() {
         eprintln!("Error Getting RoomKeys");

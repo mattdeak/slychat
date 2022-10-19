@@ -12,3 +12,4 @@ openssl = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 bytes = { workspace = true }
 serde_json = { workspace = true }
+tokio-serde = { workspace = true }
