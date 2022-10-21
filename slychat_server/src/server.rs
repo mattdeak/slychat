@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, fmt::Display, hash::Hash};
 
-use slychat_common::UserKey;
+use slychat_common::types::UserKey;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
@@ -46,6 +46,7 @@ impl<G: ChatRoom> Server<G> {
 
         let mut chat_rooms = HashMap::new();
 
+        // Create waiting room
         chat_rooms.insert(wr_str.clone(), G::build(wr_str, DEFAULT_CAPACITY));
         Self {
             users: Vec::new(),

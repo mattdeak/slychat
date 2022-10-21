@@ -1,6 +1,7 @@
 use bytes::BytesMut;
 use slychat_common::encryption::{decrypt, encrypt, KeyData};
-use slychat_common::{APICommand, UserKey};
+use slychat_common::transport::{read_command, send_command, TransportError};
+use slychat_common::types::{APICommand, APIRequest, UserKey};
 use std::io::{self, Read};
 use std::process::exit;
 use std::str;
@@ -14,6 +15,8 @@ const DEFAULT_PORT: i32 = 9001;
 type RoomKeys = Vec<UserKey>;
 type LockedRoomKeys = Arc<Mutex<RoomKeys>>;
 
+mod utils;
+
 fn generate_key(passphrase_opt: Option<&str>) -> KeyData {
     let passphrase = match passphrase_opt {
         Some(p) => p.to_string(),
@@ -26,7 +29,7 @@ async fn refresh_roomkeys(
     stream: &mut TcpStream,
     roomkeys: &mut LockedRoomKeys,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let message = APICommand::RefreshRoomKeysRequest;
+    let message = APIRequest::RefreshRoomKeysRequest;
     let serialized = serde_json::to_vec(&message)?;
 
     stream.write_all(&serialized).await?;
@@ -51,16 +54,12 @@ async fn greet(
     stream: &mut TcpStream,
     username: String,
     keys: &KeyData,
-) -> Result<(), &'static str> {
+) -> Result<(), TransportError> {
     let user_data = UserKey {
         user: username,
         public: keys.public.clone(),
     };
-    stream
-        .write_all(&serde_json::to_vec(&APICommand::Greet(user_data)).unwrap())
-        .await
-        .unwrap();
-    Ok(())
+    send_command(stream, APIRequest::LoginRequest(user_data)).await
 }
 
 fn get_username() -> String {
@@ -164,7 +163,7 @@ where
                 .iter()
                 .map(|UserKey { user, public }| {
                     let message = encrypt(&buf, public);
-                    serde_json::to_vec(&APICommand::Message(user.to_string(), message))
+                    serde_json::to_vec(&APIRequest::SendMessageRequest(user.to_string(), message))
                         .expect("Failed to serialize message.")
                 })
                 .collect();

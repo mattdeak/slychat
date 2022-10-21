@@ -6,5 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true }
+tokio-serde = { workspace = true, features = ["json"] }
+tokio-util = { workspace = true }
 openssl = { workspace = true }
 serde_json = { workspace = true }
+futures = { workspace = true }

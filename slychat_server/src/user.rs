@@ -1,4 +1,4 @@
-use slychat_common::UserKey;
+use slychat_common::types::UserKey;
 use std::collections::{HashMap, HashSet};
 use tokio::io::AsyncWriteExt;
 use tokio::io::WriteHalf;
