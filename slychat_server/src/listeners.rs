@@ -9,7 +9,7 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::server::UserId;
+use crate::server::{UserId, UserMessage};
 use crate::ServerMutex;
 use crate::{
     chatroom::ChatRoom,
@@ -39,7 +39,7 @@ pub async fn process<G: ChatRoom>(
 ) -> Result<(), ListenerError> {
     let (mut reader, mut writer) = tokio::io::split(socket);
 
-    let (sender, receiver) = tokio::sync::mpsc::channel(64);
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(64);
 
     // Handle greeting from socket
     let key = wait_for_greeting(&mut reader, &writer).await?;
@@ -56,51 +56,94 @@ pub async fn process<G: ChatRoom>(
     loop {
         buffer.clear();
 
-        let response = match read_command(&mut reader).await {
-            Ok(command) => match command {
-                APIRequest::LoginRequest(_) => {
-                    APIResponse::LoginResponse(Response::Error("Already logged in.".to_string()))
-                }
-                APIRequest::Logout => break,
-                APIRequest::RefreshRoomKeysRequest => {
-                    // TODO: this is a bit messy. Probably better to move this into a function.
-                    let s = server.lock().unwrap();
-                    let resp = match s.get_active_room(&key.user) {
-                        Ok(active_room) => {
-                            match s.chat_rooms.get(active_room).unwrap().get_roomkeys() {
-                                Ok(v) => Response::Success(
-                                    v.iter()
-                                        .map(|(user, key)| UserKey {
-                                            user: (*user).clone(),
-                                            public: key.to_vec(),
-                                        })
-                                        .collect(),
-                                ),
-                                _ => Response::Error("Unable to get roomkeys".to_string()),
-                            }
+        select! {
+            data = read_command(&mut reader) => {
+                match process_socket_read(data,  &key.user, &server) {
+                    Ok(SocketReadHandle::Response(r)) => {
+                        if send_command(&mut writer, &r).await.is_err() {
+                        eprintln!("Error encoding command: {:?}", r)
                         }
-                        Err(_) => Response::Error("Invalid Chatroom".to_string()),
-                    };
-                    APIResponse::RefreshRoomKeysResponse(resp)
+                    },
+                    Ok(_) => {println!("Logout Requested. Logging out safely."); break}
+                    Err(_) => {eprintln!("Error occurred during socket read. Forcing logout");break},
                 }
-                APIRequest::SendMessageRequest(_, _) => todo!(),
-                APIRequest::ListRoomsRequest => todo!(),
-                APIRequest::JoinRoomRequest(_) => todo!(),
-                APIRequest::LeaveRoom => todo!(),
             },
-            Err(e) => {
-                eprintln!("Unable to process last read.");
-                break;
-            }
-        };
+            message_data = receiver.recv() => {
+                if let Some(message) = message_data {
+                    // Format message and send to socket
+                    assert!(message.user_id == key.user);
 
-        if send_command(&mut writer, &response).await.is_err() {
-            eprintln!("Error encoding command: {:?}", response)
-        }
+                    let response = APIResponse::PublishMessage(message.message);
+                    if send_command(&mut writer, &response).await.is_err() {
+                    eprintln!("Error encoding command: {:?}", response)
+                    }
+                }
+            }
+            // data = test = receiver.recv() {
+
+            // }
+
+        };
     }
     // TODO: Unregister user here.
 
     Ok(())
+}
+
+enum SocketReadHandle {
+    Response(APIResponse),
+    Logout,
+}
+
+impl From<APIResponse> for SocketReadHandle {
+    fn from(s: APIResponse) -> Self {
+        Self::Response(s)
+    }
+}
+
+fn process_socket_read<G: ChatRoom>(
+    socket_input: Result<APIRequest, TransportError>,
+    user: &String,
+    server: &ServerMutex<G>,
+) -> Result<SocketReadHandle, &'static str> {
+    match socket_input {
+        Ok(command) => match command {
+            APIRequest::LoginRequest(_) => Ok(APIResponse::LoginResponse(Response::Error(
+                "Already logged in.".to_string(),
+            ))
+            .into()),
+            APIRequest::Logout => Ok(SocketReadHandle::Logout),
+            APIRequest::RefreshRoomKeysRequest => {
+                // TODO: this is a bit messy. Probably better to move this into a function.
+                let s = server.lock().unwrap();
+                let resp = match s.get_active_room(user) {
+                    Ok(active_room) => {
+                        match s.chat_rooms.get(active_room).unwrap().get_roomkeys() {
+                            Ok(v) => Response::Success(
+                                v.iter()
+                                    .map(|(user, key)| UserKey {
+                                        user: (*user).clone(),
+                                        public: key.to_vec(),
+                                    })
+                                    .collect(),
+                            ),
+                            _ => Response::Error("Unable to get roomkeys".to_string()),
+                        }
+                    }
+                    Err(_) => Response::Error("Invalid Chatroom".to_string()),
+                };
+                Ok(APIResponse::RefreshRoomKeysResponse(resp).into())
+            }
+            APIRequest::SendMessageRequest(_, _) => todo!(),
+            APIRequest::ListRoomsRequest => todo!(),
+            APIRequest::JoinRoomRequest(_) => todo!(),
+            APIRequest::LeaveRoom => todo!(),
+        },
+        Err(e) => {
+            eprintln!("Unable to process last read.");
+            Err("Unable to process last read.")
+        }
+    }
 }
 
 async fn wait_for_greeting(
@@ -125,7 +168,7 @@ async fn register_user<G: ChatRoom>(
     user: &String,
     public_key: Vec<u8>,
     writer: &mut WriteHalf<TcpStream>,
-    sender: tokio::sync::mpsc::Sender<String>,
+    sender: tokio::sync::mpsc::Sender<UserMessage>,
     server_mutex: &ServerMutex<G>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     {

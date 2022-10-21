@@ -45,6 +45,12 @@ where
     }
 }
 
+impl PartialEq<String> for UserId {
+    fn eq(&self, other: &String) -> bool {
+        &self.0 == other
+    }
+}
+
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct ChatRoomId(String);
 
@@ -55,6 +61,11 @@ where
     fn from(s: S) -> Self {
         Self(s.into())
     }
+}
+
+pub struct UserMessage {
+    pub user_id: UserId,
+    pub message: Vec<u8>,
 }
 // I don't know what the fuck to do because
 // Accessing the users which need to mutate often because socket needs to be mutable
@@ -99,7 +110,7 @@ impl<G: ChatRoom> Server<G> {
     pub fn register_user(
         &mut self,
         mut user: &String,
-        mut sender: tokio::sync::mpsc::Sender<String>,
+        mut sender: tokio::sync::mpsc::Sender<UserMessage>,
         public: Vec<u8>,
     ) -> Result<(), ServerError> {
         // Should do a membership check first
