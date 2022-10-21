@@ -24,7 +24,7 @@ impl std::fmt::Display for TransportError {
 
 impl std::error::Error for TransportError {}
 
-pub async fn send_command<W, C>(writer: &mut W, command: C) -> Result<(), TransportError>
+pub async fn send_command<W, C>(writer: &mut W, command: &C) -> Result<(), TransportError>
 where
     W: AsyncWriteExt + Send + Unpin + 'static,
     C: APICommand,

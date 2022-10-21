@@ -1,7 +1,7 @@
 use bytes::BytesMut;
 use slychat_common::encryption::{decrypt, encrypt, KeyData};
 use slychat_common::transport::{read_command, send_command, TransportError};
-use slychat_common::types::{APICommand, APIRequest, UserKey};
+use slychat_common::types::{APICommand, APIRequest, APIResponse, Response, UserKey};
 use std::io::{self, Read};
 use std::process::exit;
 use std::str;
@@ -30,21 +30,25 @@ async fn refresh_roomkeys(
     roomkeys: &mut LockedRoomKeys,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let message = APIRequest::RefreshRoomKeysRequest;
-    let serialized = serde_json::to_vec(&message)?;
 
-    stream.write_all(&serialized).await?;
+    send_command(stream, &message).await?;
 
-    let mut buffer = BytesMut::with_capacity(1024);
-    stream.read_buf(&mut buffer).await?;
+    let response = match read_command(stream).await? {
+        APIResponse::RefreshRoomKeysResponse(r) => r,
+        _ => todo!(),
+    };
 
-    let user_keys: Vec<UserKey> = serde_json::from_slice(&buffer)?;
-    {
+    if let Response::Success(keys) = response {
         let mut keymap = roomkeys.lock().unwrap();
 
         keymap.clear();
-        for key in user_keys {
+        for key in keys {
             keymap.push(key);
         }
+
+        println!("Found roomkeys! Updated to: {:?}", keymap)
+    } else {
+        todo!()
     }
 
     Ok(())
@@ -59,7 +63,7 @@ async fn greet(
         user: username,
         public: keys.public.clone(),
     };
-    send_command(stream, APIRequest::LoginRequest(user_data)).await
+    send_command(stream, &APIRequest::LoginRequest(user_data)).await
 }
 
 fn get_username() -> String {

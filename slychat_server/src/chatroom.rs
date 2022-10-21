@@ -1,8 +1,9 @@
-use super::user::ChatUser;
 use log::info;
+use slychat_common::types::UserKey;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::Display;
-use tokio::sync::mpsc::Sender;
+use std::hash::Hash;
 
 #[derive(Debug, Clone)]
 pub enum ChatRoomError {
@@ -33,37 +34,21 @@ impl Error for ChatRoomError {}
 
 pub trait ChatRoom {
     fn build(id: String, capacity: usize) -> Self;
-    fn register_user(&mut self, user: &mut ChatUser) -> Result<(), ChatRoomError>;
-    fn unregister_user(&mut self, username: String) -> Result<(), ChatRoomError>;
+    fn register_user(&mut self, username: &String, key: Vec<u8>) -> Result<(), ChatRoomError>;
+    fn unregister_user(&mut self, username: &String) -> Result<(), ChatRoomError>;
+
+    fn get_roomkeys(&self) -> Result<Vec<(&String, &Vec<u8>)>, ChatRoomError>;
     fn publish_message(&self, message: &'static str) -> Result<(), ChatRoomError>;
 }
 
-type ChannelInfo = (String, Sender<String>);
 pub struct SimpleChatRoom {
     pub id: String,
     pub capacity: usize,
     pub current_size: usize,
 
-    // A vector of user_id, sender pairs.
-    pub channels: Vec<ChannelInfo>,
+    pub registered_users: HashMap<String, Vec<u8>>,
     // A vec rather than a HashMap because we need to iterate through it a lot
     // user_collection: Arc<Mutex<UserRouter>>,
-}
-
-impl SimpleChatRoom {
-    fn has_user(&self, username: &String) -> bool {
-        self.channels.iter().any(|(u, _)| username == u)
-    }
-
-    fn remove_user(&mut self, username: &String) {
-        for i in 0..self.channels.len() {
-            let u = &self.channels[i].0.clone();
-            if u == username {
-                self.channels.swap_remove(i);
-                break;
-            }
-        }
-    }
 }
 
 impl ChatRoom for SimpleChatRoom {
@@ -72,32 +57,28 @@ impl ChatRoom for SimpleChatRoom {
             id,
             capacity,
             current_size: 0,
-            channels: Vec::new(),
+            registered_users: HashMap::new(),
         }
     }
 
-    fn register_user<'a>(&'a mut self, user: &'a mut ChatUser) -> Result<(), ChatRoomError> {
-        info!("Registering user {} into {}", user.user_data.user, self.id);
+    fn register_user(&mut self, username: &String, key: Vec<u8>) -> Result<(), ChatRoomError> {
+        info!("Registering user {} into {}", username, self.id);
         // Create a channel for sending the user messages
         let (sender, receiver) = tokio::sync::mpsc::channel::<String>(1024);
         // let username = &user.user_data.user;
 
         // Check if user already exists in chatroom
-        if self.channels.iter().any(|(u, _)| u == &user.user_data.user) {
-            return Err(ChatRoomError::UserAlreadyExists(
-                user.user_data.user.clone(),
-            ));
+        if self.registered_users.contains_key(username) {
+            return Err(ChatRoomError::UserAlreadyExists(username.into()));
+        } else {
+            self.registered_users.insert(username.into(), key);
+            Ok(())
         }
-
-        user.receivers.insert(self.id.clone(), receiver);
-        self.channels.push((user.user_data.user.clone(), sender));
-
-        Ok(())
     }
 
-    fn unregister_user(&mut self, username: String) -> Result<(), ChatRoomError> {
-        if self.has_user(&username) {
-            self.remove_user(&username);
+    fn unregister_user(&mut self, username: &String) -> Result<(), ChatRoomError> {
+        if self.registered_users.contains_key(username) {
+            self.registered_users.remove(username);
             Ok(())
         } else {
             Err(ChatRoomError::RegistrationFailure(Some(
@@ -108,5 +89,10 @@ impl ChatRoom for SimpleChatRoom {
 
     fn publish_message(&self, message: &'static str) -> Result<(), ChatRoomError> {
         todo!()
+    }
+
+    fn get_roomkeys(&self) -> Result<Vec<(&String, &Vec<u8>)>, ChatRoomError> {
+        let roomkeys: Vec<(&String, &Vec<u8>)> = self.registered_users.iter().collect();
+        Ok(roomkeys)
     }
 }
