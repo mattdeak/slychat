@@ -140,7 +140,7 @@ fn process_socket_read<G: ChatRoom>(
             APIRequest::LeaveRoom => todo!(),
         },
         Err(e) => {
-            eprintln!("Unable to process last read.");
+            eprintln!("Error reading from socket: {}", e);
             Err("Unable to process last read.")
         }
     }

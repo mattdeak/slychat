@@ -35,20 +35,26 @@ async fn refresh_roomkeys(
 
     let response = match read_command(stream).await? {
         APIResponse::RefreshRoomKeysResponse(r) => r,
-        _ => todo!(),
+        val => {
+            eprintln!("Unexpected response: {:?}", val);
+            panic!()
+        }
     };
 
-    if let Response::Success(keys) = response {
-        let mut keymap = roomkeys.lock().unwrap();
+    match response {
+        Response::Success(keys) => {
+            let mut keymap = roomkeys.lock().unwrap();
 
-        keymap.clear();
-        for key in keys {
-            keymap.push(key);
+            keymap.clear();
+            for key in keys {
+                keymap.push(key);
+            }
+            println!("Found roomkeys! Updated to: {:?}", keymap)
         }
-
-        println!("Found roomkeys! Updated to: {:?}", keymap)
-    } else {
-        todo!()
+        Response::Error(e) => {
+            eprintln!("Error refreshing roomkeys: {}", e);
+            exit(1);
+        }
     }
 
     Ok(())
@@ -63,7 +69,19 @@ async fn greet(
         user: username,
         public: keys.public.clone(),
     };
-    send_command(stream, &APIRequest::LoginRequest(user_data)).await
+    send_command(stream, &APIRequest::LoginRequest(user_data)).await?;
+
+    match read_command(stream).await? {
+        APIResponse::LoginResponse(r) => {
+            if let Response::Success(()) = r {
+                println!("Login Succeeded.");
+                Ok(())
+            } else {
+                panic!("Login failed.")
+            }
+        }
+        _ => panic!(),
+    }
 }
 
 fn get_username() -> String {

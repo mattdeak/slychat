@@ -10,14 +10,14 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 #[derive(Debug, Clone)]
 pub enum TransportError {
     WriteError,
-    ReadError,
+    ReadError(String),
 }
 
 impl std::fmt::Display for TransportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::WriteError => write!(f, "Invalid Write Transport Operation"),
-            Self::ReadError => write!(f, "Invalid Read Transport Operation"),
+            Self::ReadError(message) => write!(f, "Invalid Read Transport Operation. {}", message),
         }
     }
 }
@@ -50,7 +50,12 @@ where
     );
 
     match deserialized.try_next().await {
-        Ok(Some(v)) => serde_json::from_value::<C>(v).map_err(|_| TransportError::ReadError),
-        _ => Err(TransportError::ReadError),
+        Ok(Some(v)) => Ok(serde_json::from_value::<C>(v)
+            .map_err(|_| TransportError::ReadError("Error deserializing".to_string()))?),
+        Ok(None) => Err(TransportError::ReadError("No data".to_string())),
+        Err(e) => {
+            eprintln!("Failed to read command. Got Error: {}", e);
+            Err(TransportError::ReadError("Error reading".to_string()))
+        }
     }
 }

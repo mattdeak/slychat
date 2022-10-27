@@ -69,7 +69,7 @@ impl ChatRoom for SimpleChatRoom {
 
         // Check if user already exists in chatroom
         if self.registered_users.contains_key(username) {
-            return Err(ChatRoomError::UserAlreadyExists(username.into()));
+            Err(ChatRoomError::UserAlreadyExists(username.into()))
         } else {
             self.registered_users.insert(username.into(), key);
             Ok(())

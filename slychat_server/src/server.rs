@@ -1,4 +1,5 @@
 use bimap::BiMap;
+use log::info;
 use slychat_common::types::UserKey;
 use std::{collections::HashMap, error::Error, fmt::Display, hash::Hash};
 
@@ -125,10 +126,15 @@ impl<G: ChatRoom> Server<G> {
             .expect("Could not find waiting room")
             .register_user(user, public)?;
 
+        self.chatroom_registry
+            .insert(user.into(), WAITING_ROOM.into());
+
         Ok(())
     }
 
     pub fn create_chatroom(&mut self, chatroom_name: String, capacity: usize) -> Result<&G, &str> {
+        info!("Creating chatroom: {}", chatroom_name);
+
         let chatroom_key: ChatRoomId = chatroom_name.clone().into();
         if self.chat_rooms.contains_key(&chatroom_key) {
             return Err("Chatroom could not be created.");
@@ -145,9 +151,9 @@ impl<G: ChatRoom> Server<G> {
         let chatroom_key: ChatRoomId = chatroom_name.into();
         if self.chat_rooms.contains_key(&chatroom_key) {
             self.chat_rooms.remove(&chatroom_key);
-            return Ok(());
+            Ok(())
         } else {
-            return Err("Chatroom not found.");
+            Err("Chatroom not found.")
         }
     }
 
